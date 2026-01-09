@@ -46,12 +46,20 @@
       name: apt-transport-https
       state: present
 
-  - name: Debian - Add Elasticsearch repository key
-    apt_key:
-      url: '{{ es_apt_key }}'
-      id: '{{ es_apt_key_id }}'
-      state: present
+  - name: Ensure [elastic] keyring exists
+    get_url:
+      url: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+      dest: /usr/share/keyrings/elasticsearch-archive-keyring.gpg
     when: es_add_repository and es_apt_key | string
+
+  - name: Add Elasticsearch repo
+    ansible.builtin.apt_repository:
+      repo: >
+        deb [signed-by=/usr/share/keyrings/elasticsearch-archive-keyring.gpg]
+        https://artifacts.elastic.co/packages/7.x/apt
+        stable main
+      filename: elastic-7x
+      state: present
 
   - name: Debian - Add elasticsearch repository
     apt_repository:
@@ -64,8 +72,8 @@
       - { repo: "{{ es_other_apt_url }}", state: "absent" }
 
 - name: Include optional user and group creation.
-  when: (es_user_id is defined) and (es_group_id is defined)
-  include: elasticsearch-optional-user.yml
+  when: (es_user_id is defined)and (es_group_id is defined)
+  include_tasks: elasticsearch-optional-user.yml
 
 - name: Debian - Get installed elasticsearch version
   command: dpkg-query --showformat='${Version}' --show {{ es_package_name }}
@@ -73,13 +81,6 @@
   failed_when: False
   changed_when: False
   check_mode: no
-
-- name: Debian - unhold elasticsearch version
-  become: yes
-  dpkg_selections:
-    name: "{{ es_package_name }}"
-    selection: "install"
-  when: not es_version_lock or (installed_es_version.stdout and installed_es_version.stdout != es_version)
 
 - name: Debian - Ensure elasticsearch is installed
   become: yes
